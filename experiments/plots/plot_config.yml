@@ -1,0 +1,38 @@
+colors:
+  SQL Model: '#2ca25f'
+  PGML: '#f03b20'
+  InferDB: '#3182bd'
+
+competitor_hatches:
+  SQL Model: '///'
+  PGML: '\\\'
+  InferDB: '///\\\'
+
+SQL Model:
+  Impute/Featurize: '#b2e2e2'
+  Encode-Scale: '#66c2a4'
+  Predict: '#2ca25f'
+PGML:
+  Impute/Featurize: '#fecc5c'
+  Encode-Scale: '#fd8d3c'
+  Predict: '#f03b20'
+InferDB:
+  Impute/Featurize: '#bdd7e7'
+  Translate: '#6baed6'
+  Predict: '#3182bd'
+  
+batches:
+  nyc_rides: [1,10000,100000,729000]
+  creditcard: [1,10000,100000,140000]
+
+batches_labels:
+  nyc_rides: ['1','10k', '100k', '729k']
+  creditcard: ['1','10k', '100k', '140k']
+
+breakdown_batches:
+  nyc_rides: [1, 729000]
+  creditcard: [1, 140000]
+
+breakdown_batches_labels:
+  nyc_rides: ['1', '729k']
+  creditcard: ['1', '140k']
