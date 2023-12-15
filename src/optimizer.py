@@ -5,6 +5,7 @@ import multiprocessing as mp
 import yaml
 import os
 from tqdm import tqdm
+from copy import deepcopy
 from itertools import permutations
 
 
@@ -31,15 +32,26 @@ class Problem:
             self.sample = self.encoded_x
             self.sample_y = self.y
         self.labels = np.unique(self.y)
-        self.global_events = self.y.sum()
-        self.global_instances = self.y.shape[0]
-        self.global_nonevents = self.global_instances - self.global_events
-        self.global_mean = np.mean(self.y)
-        self.adjustement_factor = 1
+        if self.task in ('regression', 'classification'):
+            self.global_events = self.y.sum()
+            self.global_instances = self.y.shape[0]
+            self.global_nonevents = self.global_instances - self.global_events
+            self.global_mean = np.mean(self.y)
+
+        elif self.task == 'multi-class':
+            global_events = self.df.groupby(self.target_variable_number)[self.target_variable_number].agg(['count'])
+            global_events['non-events'] = self.y.shape[0] - global_events['count']
+            global_events.rename(columns={'count': 'events'}, inplace=True)
+            self.global_events = global_events.to_dict()
+
+        self.adjustement_factor = 0.5
     
     def set_number_of_bins(self):
 
         self.bin_array = np.fromiter(self.encoders.values(), dtype=int)
+    
+    def weird_division(self, n, d):
+        return n / d if d else 0
     
     def set_information_value(self):
 
@@ -49,6 +61,22 @@ class Problem:
                 agg_df = self.df.groupby(idx)[self.target_variable_number].agg(['count', 'sum'])
                 agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: ((log((x['count']-x['sum']) + self.adjustement_factor) - log(self.global_nonevents)) - (log(x['sum'] + self.adjustement_factor) - log(self.global_events))) * ((x['count']-x['sum'])/self.global_nonevents - x['sum']/self.global_events), axis=1)
                 iv_list.append(agg_df['woe'].sum())
+            elif self.task == 'multi-class':
+                class_agg = self.df.groupby(self.target_variable_number).size()
+
+                local_instances = self.df.groupby(idx, as_index=False).size()
+                index_classes = [idx]
+                index_classes.extend([self.target_variable_number])
+                class_instances = self.df.groupby(index_classes, as_index=False).size()
+
+                # print(class_instances)
+
+                agg_df = local_instances.set_index(idx).join(class_instances.set_index(idx), lsuffix='_other').fillna(0)
+                agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: ((log((x['size_other'] - x['size']) + self.adjustement_factor) - log(sum(class_agg) - class_agg[x[self.target_variable_number]] + self.adjustement_factor)) - (log(x['size'] + self.adjustement_factor) - log(class_agg[x[self.target_variable_number]] + self.adjustement_factor))) * (self.weird_division((x['size_other'] - x['size']), sum(class_agg) - class_agg[x[self.target_variable_number]]) - self.weird_division(x['size'], class_agg[x[self.target_variable_number]])), axis=1)
+
+                iv = agg_df['woe'].sum()
+
+                iv_list.append(iv)
             elif self.task == 'regression':
                 agg_df = self.df.groupby(idx)[self.target_variable_number].agg(['count', 'mean'])
                 agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: abs(x['mean'] - self.global_mean) * (x['count'] / self.global_instances), axis=1)
@@ -70,6 +98,10 @@ class Optimizer:
     def __init__(self, problem, sample_factor) -> None:
         self.problem = problem
         self.sample_factor = sample_factor
+        self.class_agg = self.problem.df.groupby(self.problem.target_variable_number).size()
+    
+    def weird_division(self, n, d):
+        return n / d if d else 0
     
     def compute_iv(self, index):
 
@@ -80,6 +112,17 @@ class Optimizer:
         elif self.problem.task == 'regression':
             agg_df = self.problem.df.groupby(index)[self.problem.target_variable_number].agg(['count', 'mean'])
             agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: abs(x['mean'] - self.problem.global_mean) * (x['count'] / self.problem.global_instances), axis=1)
+            iv = agg_df['woe'].sum()
+        elif self.problem.task == 'multi-class':
+            
+            local_instances = self.problem.df.groupby(index, as_index=False).size()
+            index_classes = deepcopy(index)
+            index_classes.extend([self.problem.target_variable_number])
+            class_instances = self.problem.df.groupby(index_classes, as_index=False).size()
+
+            agg_df = local_instances.set_index(index).join(class_instances.set_index(index), lsuffix='_other').fillna(0)
+            agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: ((log((x['size_other'] - x['size']) + self.problem.adjustement_factor) - log(sum(self.class_agg) - self.class_agg[x[self.problem.target_variable_number]] + self.problem.adjustement_factor)) - (log(x['size'] + self.problem.adjustement_factor) - log(self.class_agg[x[self.problem.target_variable_number]] + self.problem.adjustement_factor))) * (self.weird_division((x['size_other'] - x['size']), sum(self.class_agg) - self.class_agg[x[self.problem.target_variable_number]]) - self.weird_division(x['size'], self.class_agg[x[self.problem.target_variable_number]])), axis=1)
+
             iv = agg_df['woe'].sum()
         
         return iv
@@ -98,7 +141,7 @@ class Optimizer:
             self.df = self.problem.df.iloc[sample_indices]
 
         for idf, feature_index in tqdm(enumerate(set_of_candidates)):
-            if self.problem.iv_array[feature_index] == 0 or self.problem.bin_array[feature_index] <= 1:
+            if self.problem.iv_array[feature_index] == 0:
                 continue
             
             index.append(feature_index)
@@ -106,19 +149,25 @@ class Optimizer:
                 agg_df = self.problem.df.groupby(index)[self.problem.target_variable_number].agg(['count', 'sum'])
                 agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: ((log((x['count']-x['sum']) + self.problem.adjustement_factor) - log(self.problem.global_nonevents)) - (log(x['sum'] + self.problem.adjustement_factor) - log(self.problem.global_events))) * ((x['count']-x['sum'])/self.problem.global_nonevents - x['sum']/self.problem.global_events), axis=1)
                 iv = agg_df['woe'].sum()
+            elif self.problem.task == 'multi-class':
+                iv = self.compute_iv(index)
             elif self.problem.task == 'regression':
                 agg_df = self.problem.df.groupby(index)[self.problem.target_variable_number].agg(['count', 'mean'])
                 agg_df.loc[:, 'woe'] = agg_df.apply(lambda x: abs(x['mean'] - self.problem.global_mean) * (x['count'] / self.problem.global_instances), axis=1)
                 iv = agg_df['woe'].sum()
 
-            if iv <= information_value:
+            if iv <= information_value * 1.002:
                 index.remove(feature_index)
-            elif(len(index) > 1 and iv > information_value):
+            elif(len(index) > 1 and iv > information_value * 1.002):
                 information_value = iv
                 index_bins = np.argsort(self.problem.bin_array[index]) ## -> If we sort by number of bins asc, the index storage decreases.
                 index = [index[i] for i in index_bins]
             else:
                 information_value = iv
+            
+            # print("Current Information Value: " + str(information_value))
+            # print("Current Index Size: " + str(len(index)))
+            # print("----------------")
 
         self.greedy_solution = index
         self.greedy_iv = information_value

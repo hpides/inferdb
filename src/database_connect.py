@@ -1,12 +1,12 @@
 import psycopg2
 from config import config
 
-def connect():
+def connect(section):
     """ Connect to the PostgreSQL database server """
     conn = None
     try:
         # read connection parameters
-        params = config()
+        params = config(section)
 
         # connect to the PostgreSQL server
         print('Connecting to the PostgreSQL database...')

@@ -1011,7 +1011,7 @@ class preprocessing_experiment:
         table_name = self.name + '_' + model_name + '_kv'
         index_name = self.name + '_' + (self.pipeline[-1].__class__.__name__).lower() + '_' + 'index'
         ## Creates an index for the keys using spgist
-        cur.execute(sql.SQL('DROP INDEX IF EXISTS {index_name} CASCADE;CREATE INDEX {index_name} ON pgml.{table_name} using spgist(key)').format(index_name = sql.Identifier(index_name), table_name = sql.Identifier(table_name)))
+        cur.execute(sql.SQL('DROP INDEX IF EXISTS {index_name} CASCADE;CREATE INDEX {index_name} ON pgml.{table_name} using spgist(key); analyze;').format(index_name = sql.Identifier(index_name), table_name = sql.Identifier(table_name)))
         conn.commit()
     
     def create_preproccesing_function(self, encoder, features_names, solution_indices):

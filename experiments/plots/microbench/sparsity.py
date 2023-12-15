@@ -50,7 +50,7 @@ def plot_sparsity_curves(ax, font_size, title):
     path_miss_rate = df['Path Miss Rate'] * 100
     
     ax.plot(x_array, filling_degree_array, '^-k' , label='Fill-factor [\%]', markersize=4, linewidth=1)
-    ax.plot(x_array, path_miss_rate, 'o-r', label='Training-miss-rate [\%]', markersize=4, linewidth=1)
+    ax.plot(x_array, path_miss_rate, 'o-r', label='Miss-rate [\%]', markersize=4, linewidth=1)
 
     ax.tick_params(axis='both', which='major', labelsize=font_size)
     ax.tick_params(axis='both', which='minor', labelsize=font_size)
@@ -70,7 +70,7 @@ def plot_sparsity_curves(ax, font_size, title):
 
     ax.grid(axis='y', linestyle='--', linewidth=0.3)
 
-    ax.legend(loc='upper right', ncols=1, fontsize = font_size-5, frameon=False, columnspacing=0.5, labelspacing=0.2)
+    ax.legend(loc='upper right', ncols=1, fontsize = font_size-2, frameon=False, columnspacing=0.5, labelspacing=0.2)
 
     # plt.show()
     
@@ -137,7 +137,7 @@ def plot_index_benchmark(ax, font_size, title):
 
     ax.grid(axis='y', linestyle='--', linewidth=0.3)
 
-    ax.legend(loc='best', ncols=1, fontsize = font_size-4, frameon=False, columnspacing=0.5, labelspacing=0.2)
+    ax.legend(loc='best', ncols=1, fontsize = font_size-2, frameon=False, columnspacing=0.5, labelspacing=0.2)
 
     # script_folder = Path(__file__).resolve().parents[1]
     # data_path = os.path.join(script_folder, 'output', 'index_benchmark.pdf')

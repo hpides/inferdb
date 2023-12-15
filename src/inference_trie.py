@@ -87,6 +87,6 @@ class Trie(object):
                 self.dfs(node)
                 if self.type == 'regression':
                     return sum(self.output) / len(self.output)
-                elif self.type == 'classification':
+                elif self.type in ('classification', 'multi-class'):
                     counter = Counter(self.output)
                     return counter.most_common(1)[0][0]
