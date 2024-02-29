@@ -17,9 +17,9 @@ First, clone the code repository and download InferDB's docker image:
 
 ```bash
 
-    git clone https://github.com/hpides/inferdb
+git clone https://github.com/hpides/inferdb
 
-    docker pull hpides/inferdb
+docker pull hpides/inferdb
 
 ```
 
@@ -27,7 +27,7 @@ Start a container. The entryscript of the image will configure the Postgres inst
 
 ```bash
 
-    docker run -it --shm-size=4g --memory_swap -1 --name inferdb hpides/inferdb sleep infinity
+docker run -it --shm-size=4g --memory_swap -1 --name inferdb hpides/inferdb sleep infinity
 
 ```
 
@@ -35,12 +35,12 @@ To reproduce the standalone experiments, Table 1 and Table 2 in the paper, run:
 
 ```bash
 
-    # --iterations control the number of runs per model for each dataset
-    # --paper_data if true only considers the models reported in table 2
-    # To approximate the reported results you should go with: --iterations 5 --paper_models True
-    # To get all results set: --iterations 5 --paper_models False
+# --iterations control the number of runs per model for each dataset
+# --paper_data if true only considers the models reported in table 2
+# To approximate the reported results you should go with: --iterations 5 --paper_models True
+# To get all results set: --iterations 5 --paper_models False
 
-    docker exec -it inferdb bash /app/inferdb/bash_scripts/standalone_experiments/standalone_experiments.sh --iterations 1 --paper_models True
+docker exec -it inferdb bash /app/inferdb/bash_scripts/standalone_experiments/standalone_experiments.sh --iterations 1 --paper_models True
 
 ```
 
@@ -48,12 +48,12 @@ To reproduce the postgres experiments, Table 3 in the paper, run:
 
 ```bash
 
-    # --iterations control the number of runs per model for each dataset
-    # --paper_data if true only considers the models reported in table 2
-    # To approximate the reported results you should go with: --iterations 5 --paper_models True
-    # To get all results set: --iterations 5 --paper_models False
+# --iterations control the number of runs per model for each dataset
+# --paper_data if true only considers the models reported in table 2
+# To approximate the reported results you should go with: --iterations 5 --paper_models True
+# To get all results set: --iterations 5 --paper_models False
 
-    docker exec -it inferdb bash /app/inferdb/bash_scripts/pg_experiments/pg_experiments.sh --iterations 1 --paper_models True
+docker exec -it inferdb bash /app/inferdb/bash_scripts/pg_experiments/pg_experiments.sh --iterations 1 --paper_models True
 
 ```
 
@@ -61,7 +61,7 @@ Copy the tables from the container to the host:
 
 ```bash
 
-    docker cp inferdb:/app/inferdb/experiments/plots/latex/output/ ./inferdb/experiments/plots/latex/
+docker cp inferdb:/app/inferdb/experiments/plots/latex/output/ ./inferdb/experiments/plots/latex/
 
 ```
 
@@ -69,6 +69,6 @@ Docker image was built using:
 
 ```bash
 
-    docker buildx build -f Dockerfile.local --platform linux/amd64,linux/arm64 -t hpides/inferdb .
+docker buildx build -f Dockerfile.local --platform linux/amd64,linux/arm64 -t hpides/inferdb .
 
 ```
