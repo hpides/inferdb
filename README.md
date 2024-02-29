@@ -27,7 +27,7 @@ Start a container. The entryscript of the image will configure the Postgres inst
 
 ```bash
 
-docker run -it --shm-size=4g --memory_swap -1 --name inferdb hpides/inferdb sleep infinity
+docker run -it --shm-size=4g --memory-swap -1 --name inferdb hpides/inferdb sleep infinity
 
 ```
 
