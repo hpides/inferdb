@@ -6,6 +6,11 @@ We evaluate InferDB on a server with an AMD-EPYC-7742 2.25GHz CPU (10 cores used
 
 - Docker
 
+# Supported CPU architechtures:
+
+- arm64
+- amd64
+
 # Running the experiments
 
 First, clone the code repository and download InferDB's docker image:
