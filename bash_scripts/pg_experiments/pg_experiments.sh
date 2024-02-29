@@ -9,7 +9,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-cd $HOME/inferdb/experiments/postgres
+cd ./inferdb/experiments/postgres
 
 python ./creditcard/creditcard_pgml.py $iterations $paper_models
 python ./hits/hits_pgml.py $iterations $paper_models
