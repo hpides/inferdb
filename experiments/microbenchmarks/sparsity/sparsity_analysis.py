@@ -104,7 +104,7 @@ def train_pipeline(path_to_data, target_feature, pipeline):
 def get_kv_tuples(trained_pipeline, training_features, path_to_data, target_feature, complex=False, optimize=True):
 
         df = pd.read_csv(path_to_data)
-        encoder = Encoder('optimal', 'regression')
+        encoder = Encoder('regression')
         
         X = df[training_features]
         y = df[target_feature].to_numpy()
@@ -214,7 +214,7 @@ def create_test_pg(path_to_data, target_feature, trained_pipeline, index_lengths
     conn, cur = create_postgres_connection()
 
     df = pd.read_csv(path_to_data)
-    encoder = Encoder('optimal', 'regression')
+    encoder = Encoder('regression')
     
     X = df[training_features]
     y = df[target_feature].to_numpy()

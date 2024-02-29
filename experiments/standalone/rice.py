@@ -21,70 +21,69 @@ from sklearn.neighbors import KNeighborsClassifier
 from lightgbm import LGBMClassifier
 from sklearn.impute import SimpleImputer
 
-data_path = os.path.join(project_folder, 'data', 'rice', 'rice.csv')
+def get_experiment_data():
 
-df = pd.read_csv(data_path)
+    data_path = os.path.join(project_folder, 'data', 'paper_data', 'rice', 'rice.csv')
 
-training_features = [i for i in list(df) if i != 'CLASS']
-X = df[training_features].to_numpy()
-le = LabelEncoder()
-y = le.fit_transform(df['CLASS'].to_numpy())
+    df = pd.read_csv(data_path)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42, test_size=0.1)
+    training_features = [i for i in list(df) if i != 'CLASS']
+    X = df[training_features].to_numpy()
+    le = LabelEncoder()
+    y = le.fit_transform(df['CLASS'].to_numpy())
 
-cat_mask = []
-num_mask = [i for i in range(X_train.shape[1])]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42, test_size=0.1)
 
-xgboost = xgb.XGBClassifier(objective="multi:softmax", num_class=5, random_state=42, n_jobs=-1)
-lr = LogisticRegression(n_jobs=-1, max_iter=10000)
-dt = DecisionTreeClassifier()
-nn = MLPClassifier(hidden_layer_sizes=(X_train.shape[1],), max_iter=10000, activation='logistic', alpha=0.005)
-knn = KNeighborsClassifier(algorithm='kd_tree', n_jobs=-1)
-lgbm = LGBMClassifier(n_estimators=500, n_jobs=-1, reg_lambda=1, reg_alpha=1)
+    return X_train, X_test, y_train, y_test
 
-models = [
-    xgboost, 
-    lr, 
-    dt, 
-    nn, 
-    knn, 
-    lgbm
-    ]
-tree_based_models = [xgboost.__class__.__name__, dt.__class__.__name__, lgbm.__class__.__name__]
+def get_training_length():
 
-numerical_imputer = Pipeline(
-                    steps= 
-                    [   
-                        ('imputer', SimpleImputer())
-                    ]
-)
+    data_path = os.path.join(project_folder, 'data', 'paper_data', 'rice', 'rice.csv')
 
-numerical_transformer = Pipeline(
-                    steps=
-                            [
-                                ('scaler', RobustScaler())
-                            ]
-                    )
+    df = pd.read_csv(data_path, nrows=5)
 
-column_transformer = ColumnTransformer(
-                                        transformers=[
-                                                        ('num', numerical_transformer, [])
-                                                    ]
-                                        , remainder='passthrough'
-                                        , n_jobs=-1
+    training_features = [i for i in list(df) if i != 'CLASS']
+    
+    return len(training_features)
 
-                                    )
+def get_pipeline(model):
 
-pipeline = Pipeline(
+    len_train_features = get_training_length()
+
+    tree_based_models = ['xgbclassifier', 'decisiontreeclassifier', 'lgbmclassifier']
+    num_mask = [i for i in range(len_train_features)]
+
+    numerical_imputer = Pipeline(
+                        steps= 
+                        [   
+                            ('imputer', SimpleImputer())
+                        ]
+    )
+
+    numerical_transformer = Pipeline(
                         steps=
-                                [   
-                                    ('imputer', SimpleImputer()),
-                                    ('column_transformer', column_transformer)
-                                    
+                                [
+                                    ('scaler', RobustScaler())
                                 ]
-                    )
-df = pd.DataFrame()
-for model in models:
+                        )
+
+    column_transformer = ColumnTransformer(
+                                            transformers=[
+                                                            ('num', numerical_transformer, [])
+                                                        ]
+                                            , remainder='passthrough'
+                                            , n_jobs=-1
+
+                                        )
+
+    pipeline = Pipeline(
+                            steps=
+                                    [   
+                                        ('imputer', SimpleImputer()),
+                                        ('column_transformer', column_transformer)
+                                        
+                                    ]
+                        )
 
     if model.__class__.__name__ in tree_based_models:
         params = {'remainder':'passthrough'}
@@ -98,59 +97,66 @@ for model in models:
         pipeline.named_steps.column_transformer.transformers = [
                                                                     ('num', numerical_transformer, num_mask)
                                                                 ]
-        
+            
     pipeline.steps.append(['clf', model])
-    
-    for i in range(5):
-        x_trans = pipeline[:-1].fit_transform(X_train)
-        print(np.argwhere(np.isnan(x_trans)))
-        exp = Standalone(X_train, X_test, y_train, y_test, 'rice', 'multi-class', False, False, pipeline=pipeline)
-        d = exp.create_report(cat_mask=cat_mask)
+
+    return pipeline
+
+def get_report(pipeline, iterations):
+
+    X_train, X_test, y_train, y_test = get_experiment_data()
+
+    exp = Standalone(X_train, X_test, y_train, y_test, 'rice', 'multi-class', False, False, pipeline=pipeline)
+    df = pd.DataFrame()
+    for i in range(iterations):
+        
+        d = exp.create_report(cat_mask=[])
         d['iteration'] = i
         df = pd.concat([df, d])
-        export_path = os.path.join(project_folder, 'experiments', 'output', exp.experiment_name)
+    
+    return df
+
+
+def rice_experiment(iterations=5, paper_models=False):
+
+    train_len = get_training_length()
+
+    xgboost = xgb.XGBClassifier(objective="multi:softmax", num_class=5, random_state=42, n_jobs=-1)
+    lr = LogisticRegression(n_jobs=-1, max_iter=10000)
+    dt = DecisionTreeClassifier()
+    nn = MLPClassifier(hidden_layer_sizes=(train_len,), max_iter=10000, activation='logistic', alpha=0.005)
+    knn = KNeighborsClassifier(algorithm='kd_tree', n_jobs=-1)
+    lgbm = LGBMClassifier(n_estimators=500, n_jobs=-1, reg_lambda=1, reg_alpha=1)
+
+    if paper_models:
+        models = [
+            xgboost, 
+            lr, 
+            lgbm
+            ]
+    else:
+        models = [
+            xgboost, 
+            lr, 
+            dt, 
+            nn, 
+            knn, 
+            lgbm
+            ]
+    
+    df = pd.DataFrame()
+    for model in models:
+        
+        pipeline = get_pipeline(model)
+        d = get_report(pipeline, iterations)
+        df = pd.concat([df, d])
+        export_path = os.path.join(project_folder, 'experiments', 'output', 'rice')
         df.to_csv(export_path + '_standalone.csv', index=False)
 
-    pipeline.steps.pop(-1)
 
-# pipeline.fit(X_train, y_train)
+if __name__ == "__main__":
 
-# y_pred = pipeline.predict(X_test)
-
-# acc = accuracy_score(y_test, y_pred)
-
-# exp = Standalone(X_train, X_test, y_train, y_test, 'rice', 'multi-class', False, pipeline=pipeline)
-
-# d = exp.create_report(cat_mask=[], with_pred=True)
-
-# export_path = os.path.join(exp_folder, 'experiments', 'output', exp.experiment_name + '_' + exp.model_name)
-# d.to_csv(export_path + '_standalone.csv', index=False)
-
-
-# X_train_sub, X_test_sub = X_train.loc[:, [training_features[i] for i in exp.solution]], X_test.loc[:, [training_features[i] for i in exp.solution]]
-# # new_cat_mask = [training_features[i] for i in exp.solution if i in cat_mask]
-# new_num_mask = [training_features[i] for i in exp.solution]
-
-# numerical_imputer = pipeline.named_steps.column_transformer.transformers[0]
-# pipeline.named_steps.column_transformer.transformers[0] = (numerical_imputer[0], numerical_imputer[1], list(X_train_sub))
-
-# exp = Standalone(X_train_sub, X_test_sub, y_train, y_test, 'rice', 'multi-class', False, False, pipeline)
-
-# d = exp.create_report([], True)
-
-# export_path = os.path.join(exp_folder, 'experiments', 'output', exp.experiment_name + '_' + exp.model_name)
-# d.to_csv(export_path + '_standalone_rice_simple.csv', index=False)
-
-# import matplotlib.pyplot as plt
-
-# from sklearn.metrics import ConfusionMatrixDisplay
-
-# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-# ConfusionMatrixDisplay.from_predictions(y_test, exp.y_pred_trie, display_labels=le.classes_, ax=axs[1])
-# ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=le.classes_, ax=axs[0])
-
-# plt.show()
-
+    rice_experiment(iterations=int(sys.argv[1]), paper_models=bool(sys.argv[2]))
 
 
 

@@ -22,7 +22,7 @@ from copy import deepcopy
 from collections import Counter
 
 exp_folder = Path(__file__).resolve().parents[3]
-data_path = os.path.join(exp_folder, 'data', 'mnist_784', 'mnist_784.csv')
+data_path = os.path.join(exp_folder, 'data', 'paper_data', 'mnist_784', 'mnist_784.csv')
 
 df = pd.read_csv(data_path)
 
@@ -76,7 +76,7 @@ pipeline.fit(X_train, y_train)
 
 y_pred_train = pipeline.predict(X_train)
 
-encoder = Encoder('optimal', 'multi-class')
+encoder = Encoder('multi-class')
 
 encoder.fit(X_train.to_numpy(), y_pred_train, [])
 
@@ -111,7 +111,7 @@ for i in range(10):
 
     y_pred_train = model.predict(X_train)
 
-    encoder = Encoder('optimal', 'classification')
+    encoder = Encoder('classification')
 
     encoder.fit(X_train.to_numpy(), y_pred_train, [])
 

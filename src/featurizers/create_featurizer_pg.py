@@ -1,12 +1,7 @@
 import sys
 import os
 from pathlib import Path
-x_folder = Path(__file__).resolve().parents[3]
-src_folder = os.path.join(x_folder, 'src')
-sys.path.append(str(src_folder))
-from sklearn.linear_model import LinearRegression
 import pandas as pd
-from nyc_rides_featurizer import NYC_Featurizer
 import re
 from psycopg2 import sql
 from io import StringIO
@@ -35,7 +30,7 @@ class NYC_Featurizer_pg:
 
         conn, cur = self.create_postgres_connection()
 
-        parent = Path(__file__).resolve().parents[3]
+        parent = Path(__file__).resolve().parents[2]
         
         geo_distance = os.path.join(parent, 'sql_scripts/geo_distance.sql')
         prefix_search = os.path.join(parent, 'sql_scripts/prefix_search.sql')

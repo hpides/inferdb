@@ -62,8 +62,6 @@ class Trie(object):
 
         Args:
             - node: the node to start with
-            - prefix: the current prefix, for tracing a
-                key while traversing the trie
         """
         if any(isinstance(children, TrieLeaf) for children in node.children.values()):
             for children in node.children.values():
@@ -73,6 +71,14 @@ class Trie(object):
                 self.dfs(child)
 
     def query(self, x):
+        """Finds a key in the structure or performs prefix aggregation to create a prediction
+
+        Args:
+            x (list, array): list or array containing the keys to lookup
+
+        Returns:
+            int, float: value for the key in the structure
+        """        
         node = self.root
 
         for k in x:

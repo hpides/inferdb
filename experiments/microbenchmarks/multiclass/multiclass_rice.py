@@ -16,7 +16,7 @@ import xgboost as xgb
 from sklearn.metrics import accuracy_score
 
 exp_folder = Path(__file__).resolve().parents[3]
-data_path = os.path.join(exp_folder, 'data', 'rice', 'rice.csv')
+data_path = os.path.join(exp_folder, 'data', 'paper_data', 'rice', 'rice.csv')
 
 df = pd.read_csv(data_path)
 

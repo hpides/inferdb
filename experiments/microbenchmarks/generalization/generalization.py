@@ -30,7 +30,7 @@ from encoder import Encoder
 from optimizer import Problem, Optimizer
 from tqdm import tqdm
 
-data_path = os.path.join(x_folder, 'data', 'nyc_rides', 'nyc_rides_augmented_dirty.csv')
+data_path = os.path.join(x_folder, 'data', 'paper_data', 'nyc_rides', 'nyc_rides_augmented_dirty.csv')
 
 df = pd.read_csv(data_path)
 training_features = [i for i in list(df) if i != 'trip_duration']
@@ -102,7 +102,7 @@ results_list = [['standalone', X_trans.shape, model.__class__.__name__, error]]
 
 ############################ INFERDB
 
-encoder = Encoder('optimal', 'regression')
+encoder = Encoder('regression')
 
 y_train_pred = np.exp(pipeline[-1].predict(X_trans))
 
@@ -166,7 +166,7 @@ results_list.append(['InferDB', encoded_training_set.shape, model.__class__.__na
 
 ############################ INFERDB - True values
 
-encoder = Encoder('optimal', 'regression')
+encoder = Encoder('regression')
 
 y_train_pred = np.exp(pipeline[-1].predict(X_trans))
 

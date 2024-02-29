@@ -15,15 +15,8 @@ from sklearn.model_selection import cross_val_score, GridSearchCV, KFold, Random
 import xgboost as xgb
 from sklearn.metrics import accuracy_score
 
-# data = [[1, 0, 2], [1, 1, 5], [1, 2, 8], [2, 6, 9], [2, 2, 3], [2, 3, 6]]
-# df = pd.DataFrame(data, columns=["bucket", "class", "count"])
-
-# # agg_df = df.groupby('a', as_index=False).size()
-# idx = df.groupby(['bucket'])['count'].idxmax()
-# print(df.loc[idx])
-
 exp_folder = Path(__file__).resolve().parents[3]
-data_path = os.path.join(exp_folder, 'data', 'mnist_784', 'mnist_784.csv')
+data_path = os.path.join(exp_folder, 'data', 'paper_data', 'mnist_784', 'mnist_784.csv')
 
 df = pd.read_csv(data_path)
 

@@ -23,8 +23,31 @@ from tqdm import tqdm
 from numpy import percentile
 
 class Transpiler:
-
+    """This is the parent class of the transpiler. It contains some standard methods to interact with a postgres instance, such as create a postgres connection, insert test and train data
+        , and a fit function that trains the pipeline that is passed in the constructor.
+    """
     def __init__(self, X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb=False, pipeline=None, inferdb_columns=None, feature_names=None, section=None, featurizer_query=None) -> None:
+        """Constructor method for the transpiler parent class. Responsible for the training of the passed pipeline.
+
+        Args:
+            X_train (np.array or pd.DataFrame): array or dataframe containing the train data
+            X_test (np.array or pd.DataFrame): array or dataframe containing the test data
+            y_train (np.array): array containing the train true values
+            y_test (np.array): array containing the test true values
+            experiment_name (string): name of the experiment
+            task (string): 
+                - 'classification' for binary classification
+                - 'regression' for regression
+                - 'multi-class' for multi-label classification
+            has_featurizer (bool): boolean indicator for featurizer at the 0 position (pipeline[0]) of the pipeline steps.
+            featurize_inferdb (bool, optional): If true, featurizer should implement method 'featurize_for_inferdb' which transforms the input data and returns a set
+                                                of defined features for InferDB . Defaults to False.
+            pipeline (Scikitlearn Pipeline, optional): Pipeline to train input data. Transforms input data into predictions. Defaults to None.
+            inferdb_columns (list, optional): List containing a subset of columns for InferDB. Defaults to None.
+            feature_names (list, optional): Ordered list containing the names for each column in the input data. Defaults to None.
+            section (string, optional): Schema prefix for postgres. Defaults to None.
+            featurizer_query (psycopg2.Composed, optional): SQL composition containing the query to to transform the input data into a featurized relation in postgres. Defaults to None.
+        """
         self.experiment_name = self.text_normalizer(experiment_name).lower()
         self.model = pipeline[-1]
         self.task = task
@@ -52,22 +75,53 @@ class Transpiler:
 
 
     def create_postgres_connection(self):
+        """Method to create a postgres connection
+
+        Returns:
+            conn, cur: db connection and cursor
+        """
         conn = connect(self.section)
         cur = conn.cursor()
 
         return conn, cur
 
     def addapt_numpy_float64(numpy_float64):
+        """Adapts numpy dtype float64 to postgres dtypes
+
+        Args:
+            numpy_float64 (numpy float64 dtype): Numpy's float64 dtype
+
+        Returns:
+            _type_: psycopg adapter
+        """
         return AsIs(numpy_float64)
     
     def addapt_numpy_int64(numpy_int64):
+        """Adapts numpy dtype int64 to postgres dtypes
+
+        Args:
+            numpy_int64 (numpy int64 dtype): Numpy's int64 dtype
+
+        Returns:
+            _type_: psycopg adapter
+        """
         return AsIs(numpy_int64)
     
     def adapt_psycopg2(self):
+        """Method to adapt int64 and float64 numpy dtypes to postgres dtypes
+        """
         register_adapter(np.float64, self.addapt_numpy_float64)
         register_adapter(np.int64, self.addapt_numpy_int64)
 
     def text_normalizer(self, text):
+        """Method to clean strings 
+
+        Args:
+            text (string): string to clean
+
+        Returns:
+            string: cleaned string
+        """
 
         rep = {"-": "_", ".": "_", "?":"", "/":"", "(":"_", ")":"_", "&":"_", "#":"x"} # define desired replacements here
 
@@ -79,6 +133,8 @@ class Transpiler:
         return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
     
     def create_aux_functions(self):
+        """Method to crate auxiliary functions in postgres that are needed in the preprocessing pipelines.
+        """
 
         conn, cur = self.create_postgres_connection()
 
@@ -110,6 +166,15 @@ class Transpiler:
         conn.commit()
     
     def evaluate_runtime(self, q):
+        """Extracts a query runtime from postgres' explain analyze
+
+        Args:
+            q (string): query to evaluate
+
+        Returns:
+            float: runtime in ms
+        """        """"""
+
 
         conn, cur = self.create_postgres_connection()
 
@@ -128,6 +193,11 @@ class Transpiler:
         return runtime
     
     def create_measure_function(self, function):
+        """creates function in postgres to measure the runtime of a query
+
+        Args:
+            function (string): function name to evaluate
+        """        """"""
 
         conn, cur = self.create_postgres_connection()
     
@@ -169,6 +239,12 @@ class Transpiler:
         conn.commit()
     
     def create_acc_measure_function(self, function, score):
+        """creates a postgres function to measure the effectiveness of a scoring function
+
+        Args:
+            function (string): function name
+            score (string): score; 'f1', 'recall', 'precision', 'acc', 'rmsle'
+        """        """"""
 
         conn, cur = self.create_postgres_connection()
 
@@ -301,6 +377,8 @@ class Transpiler:
         conn.commit()
     
     def create_test_table(self):
+        """Method to create a new postgres relation for the test data
+        """
 
         conn, cur = self.create_postgres_connection()
         ### Creates a table where test data will be stored
@@ -333,6 +411,8 @@ class Transpiler:
         conn.commit()
     
     def create_train_table(self):
+        """Method to create a new postgres relation for the train data
+        """
 
         conn, cur = self.create_postgres_connection()
         ### Creates a table where test data will be stored
@@ -352,7 +432,44 @@ class Transpiler:
         cur.execute(initial_statement)
         conn.commit()
 
+    def drop_train_table(self):
+        """Method to drop the train data
+        """
+
+        conn, cur = self.create_postgres_connection()
+        ### Creates a table where test data will be stored
+        table_name = self.text_normalizer(self.input_name + '_train').lower()
+        initial_statement = 'DROP TABLE IF EXISTS ' + str(self.section) + '.' + table_name + ' CASCADE;'
+
+        ### Drop table
+        cur.execute(initial_statement)
+        conn.commit()
+
+    def clean_up(self):
+
+        conn, cur = self.create_postgres_connection()
+        ### Drops all tables after the experiment is done
+        
+        initial_statement = sql.SQL("""
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_imputed CASCADE;
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_featurized CASCADE;
+                                DROP TABLE IF EXISTS {section}.{input_name}_test CASCADE;
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_scored CASCADE;
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_encoded CASCADE;
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_encoded_relational CASCADE;
+                                DROP MATERIALIZED VIEW IF EXISTS {section}.{input_name}_preprocessed CASCADE;
+                            """).format(section=sql.SQL(self.section),
+                                        input_name=sql.SQL(self.input_name)
+                                        )
+
+        ### Drop table
+        cur.execute(initial_statement)
+        conn.commit()
+
+
     def insert_test_tuples(self):
+        """Inserts the test tuples into the corresponding postgres relation
+        """
 
         conn, cur = self.create_postgres_connection()
         ### Inserts tuples into test table
@@ -376,6 +493,8 @@ class Transpiler:
         print(cur.rowcount, "Records inserted successfully into " + table_name + " table")
     
     def insert_train_tuples(self):
+        """Inserts the train tupes into the corresponding train relation
+        """
 
         conn, cur = self.create_postgres_connection()
         ### Inserts tuples into test table
@@ -402,21 +521,29 @@ class Transpiler:
         print(cur.rowcount, "Records inserted successfully into " + table_name + " table")
     
     def create_utils(self):
+        """creates adapters and auxiliary functions in postgres
+        """
 
         self.adapt_psycopg2()
         self.create_aux_functions()
     
     def create_test_artifacts(self):
+        """creates test relation and inserts test tuples
+        """
 
         self.create_test_table()
         self.insert_test_tuples()
     
     def create_train_artifacts(self):
+        """creates train relation and inserts train tuples
+        """
 
         self.create_train_table()
         self.insert_train_tuples()
     
     def fit(self):
+        """Trains the pipeline
+        """
  
         if self.has_featurizer:
 
@@ -464,6 +591,13 @@ class Transpiler:
         self.preprocessing_output_shape = self.x_trans.shape
     
     def translate_imputer(self, limit_factor = -1, source_table = 'test', source_table_feature_names = None):
+        """Translate a pipeline's simple imputer to a postgres sql query
+
+        Args:
+            limit_factor (int, optional): maximum number of records to process. If -1 process all records in relation. Defaults to -1.
+            source_table (str, optional): table to process the data from. Defaults to 'test'.
+            source_table_feature_names (list, optional): list of names (in order) of the source table. Defaults to None.
+        """    
 
         conn, cur = self.create_postgres_connection()
 
@@ -552,6 +686,13 @@ class Transpiler:
 
     
     def translate_column_transfomer(self, limit_factor = -1, source_table = 'imputed', source_table_feature_names=None):
+        """translates a pipeline's column transformer into a postgres SQL query
+
+        Args:
+            limit_factor (int, optional): maximum number of records to process. If -1 process all records in relation. Defaults to -1.
+            source_table (str, optional): table to process the data from. Defaults to 'test'.
+            source_table_feature_names (list, optional): list of names (in order) of the source table. Defaults to None.
+        """        """"""
 
         conn, cur = self.create_postgres_connection()
 
@@ -694,6 +835,8 @@ class Transpiler:
         conn.commit()
 
     def create_featurizer(self):
+        """creates SQL featurizer query in postgres
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -711,17 +854,50 @@ class Transpiler:
 
         conn.commit()
 
-
 class InferDB(Transpiler):
+    """Child class for InferDB
+
+    Args:
+        Transpiler (Transpiler): Transpiler
+    """
 
     def __init__(self, X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, populate_paths=False, featurize_inferdb=False, pipeline=None, inferdb_columns=None, feature_names=None, section='pgml'):
+        """Constructor method for InferDB
+
+        Args:
+            X_train (np.array or pd.DataFrame): array or dataframe containing the train data
+            X_test (np.array or pd.DataFrame): array or dataframe containing the test data
+            y_train (np.array): array containing the train true values
+            y_test (np.array): array containing the test true values
+            experiment_name (string): name of the experiment
+            task (string): 
+                - 'classification' for binary classification
+                - 'regression' for regression
+                - 'multi-class' for multi-label classification
+            has_featurizer (bool): boolean indicator for featurizer at the 0 position (pipeline[0]) of the pipeline steps.
+            featurize_inferdb (bool, optional): If true, featurizer should implement method 'featurize_for_inferdb' which transforms the input data and returns a set
+                                                of defined features for InferDB . Defaults to False.
+            pipeline (Scikitlearn Pipeline, optional): Pipeline to train input data. Transforms input data into predictions. Defaults to None.
+            inferdb_columns (list, optional): List containing a subset of columns for InferDB. Defaults to None.
+            feature_names (list, optional): Ordered list containing the names for each column in the input data. Defaults to None.
+            section (string, optional): Schema prefix for postgres. Defaults to None.
+        """
 
         super().__init__(X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb, pipeline, inferdb_columns, feature_names, section)
         self.populate_paths = populate_paths
     
     def get_kv_tuples(self, cat_mask, with_pred=True):
+        """Creates kv tuples
 
-        encoder = Encoder('optimal', self.task)
+        Args:
+            cat_mask (list): list containing the indices for categorical features in the input data
+            with_pred (bool, optional): if True aggregates predictions from pipeline. If false aggregates true values from y_train. Defaults to True.
+
+        Returns:
+            array: array containing the kv pairs
+        """
+
+        encoder = Encoder(self.task)
 
         if with_pred:
             encoder.fit(self.x_featurized_inferdb, self.y_train_pred, cat_mask)
@@ -826,6 +1002,11 @@ class InferDB(Transpiler):
         return tuples
 
     def create_kv_table(self, table_name):
+        """Creates new relation in postgres for the kv pairs
+
+        Args:
+            table_name (string): name of the relation
+        """
         conn, cur = self.create_postgres_connection()
         ## Creates a table where key, predictions will be stored
         cur.execute(sql.SQL('DROP TABLE IF EXISTS {section}.{table_name} CASCADE; CREATE TABLE {section}.{table_name} (key TEXT NOT NULL, value NUMERIC NOT NULL)').format(table_name=sql.Identifier(table_name)
@@ -834,6 +1015,13 @@ class InferDB(Transpiler):
         conn.commit()
 
     def insert_tuples_in_kv_table(self,table_name, cat_mask=[] , with_pred=True):
+        """Inserts kv tuples in the kv relation
+
+        Args:
+            table_name (string): kv relation name
+            cat_mask (list, optional): list containing the indices of categorical features in the input data. Defaults to [].
+            with_pred (bool, optional): if True aggregates predictions from pipeline. If false aggregates true values from y_train.. Defaults to True.
+        """
         conn, cur = self.create_postgres_connection()
         tuples = self.get_kv_tuples(cat_mask=cat_mask, with_pred=with_pred)
 
@@ -849,6 +1037,12 @@ class InferDB(Transpiler):
         print(cur.rowcount, "Records inserted successfully into " + table_name + " table")
 
     def create_index(self, index_name, table_name):
+        """Creates an index in Postgres on top of the kv table
+
+        Args:
+            index_name (string): Index name
+            table_name (string): table name to build the index on top of
+        """
         conn, cur = self.create_postgres_connection()
         ## Creates an index for the keys using spgist
         cur.execute(sql.SQL('DROP INDEX IF EXISTS {index_name} CASCADE;CREATE INDEX {index_name} ON {section}.{table_name} using spgist(key); analyze;').format(index_name = sql.Identifier(index_name)
@@ -858,6 +1052,8 @@ class InferDB(Transpiler):
         conn.commit()
     
     def create_scoring_function_kv(self):
+        """Creates scorer function for InferDB. This function creates a prediction for all datapoints in the test relation
+        """        
         conn, cur = self.create_postgres_connection()
 
         function_statement = sql.SQL("""
@@ -902,7 +1098,15 @@ class InferDB(Transpiler):
         elif self.task == 'regression':
             self.create_acc_measure_function('score_kv', 'rmsle')
     
-    def create_preproccesing_function(self, cat_mask = [], limit_factor=-1, featurize_query=None, table='featurized'):
+    def create_preproccesing_function(self, cat_mask = [], limit_factor=-1, featurize_query=None, table='test'):
+        """Creates SQL query that contains the logic to transform values in the input data to keys in the embedded space
+
+        Args:
+            cat_mask (list, optional): list of indices for categorical features in the input data. Defaults to [].
+            limit_factor (int, optional): number of records to process. If -1 all records are processed. Defaults to -1.
+            featurize_query (string, optional): SQL query to featurize input data. Defaults to None.
+            table (str, optional): name of the source table for preprocess the data from. Defaults to 'test'.
+        """        
 
 
         conn, cur = self.create_postgres_connection()
@@ -1069,7 +1273,15 @@ class InferDB(Transpiler):
         cur.execute(persist_statement)
         conn.commit()
     
-    def create_solution(self, cat_mask=[], limit_factor=-1, featurize_query=None, with_pred=True):
+    def create_solution(self, cat_mask=[], limit_factor=-1, featurize_query=None, with_pred=True, source_table='test'):
+        """Creates kv relation and inserts kv tuples. Creates preprocessing and scoring functions.
+
+        Args:
+            cat_mask (list, optional): list of indices for categorical features in the input data. Defaults to [].
+            limit_factor (int, optional): number of records to process. if -1 all records in the input data are processed. Defaults to -1.
+            featurize_query (_type_, optional): _description_. Defaults to None.
+            with_pred (bool, optional): If true aggregates predictions from pipeline. If false aggregates true values from y_train. Defaults to True.
+        """
 
         kv_table_name = (self.input_name).lower() + '_' + 'kv'
         index_name = (self.input_name).lower() + '_' + 'index'
@@ -1077,12 +1289,14 @@ class InferDB(Transpiler):
         self.create_kv_table(kv_table_name)
         self.insert_tuples_in_kv_table(kv_table_name, with_pred=with_pred)
         self.create_index(index_name, kv_table_name)
-        self.create_preproccesing_function(cat_mask, limit_factor, featurize_query)
+        self.create_preproccesing_function(cat_mask, limit_factor, featurize_query, source_table)
         self.create_scoring_function_kv()
 
         print('Index representation was created')
 
     def create_report_function_pg(self):
+        """Creates function in postgres to summarize end-to-end performance of InferDB solution
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1175,7 +1389,18 @@ class InferDB(Transpiler):
         cur.execute(function_statement)
         conn.commit()
 
-    def create_report_pg(self, cat_mask=[], batch_size=-1, featurize_query=None, with_pred=True):
+    def create_report_pg(self, cat_mask=[], batch_size=-1, featurize_query=None, with_pred=True, iterations=5, source_table='test'):
+        """Creates summary dataframe containing performance numbers for InferDB solution
+
+        Args:
+            cat_mask (list, optional): list containing indices for categorical features in input data. Defaults to [].
+            batch_size (int, optional): batch size to process. If -1 all records in the input data are processed. Defaults to -1.
+            featurize_query (_type_, optional): _description_. Defaults to None.
+            with_pred (bool, optional): If true aggregates pipeline's predictions. If false, aggregates y_train values. Defaults to True.
+
+        Returns:
+            DataFrame: pandas DataFrame containing performance numbers for InferDB solution
+        """        
 
         DEC2FLOAT = new_type(
         DECIMAL.values,
@@ -1186,7 +1411,7 @@ class InferDB(Transpiler):
         model_name = (self.pipeline[-1].__class__.__name__).lower()
         input_name = self.experiment_name + '_' + model_name
 
-        self.create_solution(cat_mask, batch_size, featurize_query, with_pred)
+        self.create_solution(cat_mask, batch_size, featurize_query, with_pred, source_table)
         self.create_report_function_pg()
 
         conn, cur = self.create_postgres_connection()
@@ -1196,7 +1421,7 @@ class InferDB(Transpiler):
                                                                                              )
         df = pd.DataFrame()
 
-        for i in range(5):
+        for i in range(iterations):
             cur.execute(query)
 
             result = cur.fetchall()
@@ -1207,8 +1432,10 @@ class InferDB(Transpiler):
             
             if self.task == 'regression':
                 columns = ['Solution', 'Size (B)', 'RMSLE', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
             else:
                 columns = ['Solution', 'Size (B)', 'Accuracy', 'Precision', 'Recall', 'F1', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
 
             summary_df = pd.DataFrame(results, columns=columns)
             summary_df['End-to-End Latency (ms)'] = summary_df.apply(lambda x: x['Impute Featurize Latency (ms)'] + x['Encode Scale Latency (ms)'] + x['Score Latency (ms)'], axis=1)
@@ -1221,14 +1448,45 @@ class InferDB(Transpiler):
         return df
 
 class SQLmodel(Transpiler):
+    """Child class for SQL transpiler
+
+    Args:
+        Transpiler (Transpiler): _description_
+    """
 
     def __init__(self, X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb=False, pipeline=None, inferdb_columns=None, feature_names=None, section='pgml', featurize_query=None):
+        """Constructor method for SQL transpiler
+
+        Args:
+            X_train (np.array or pd.DataFrame): array or dataframe containing the train data
+            X_test (np.array or pd.DataFrame): array or dataframe containing the test data
+            y_train (np.array): array containing the train true values
+            y_test (np.array): array containing the test true values
+            experiment_name (string): name of the experiment
+            task (string): 
+                - 'classification' for binary classification
+                - 'regression' for regression
+                - 'multi-class' for multi-label classification
+            has_featurizer (bool): boolean indicator for featurizer at the 0 position (pipeline[0]) of the pipeline steps.
+            featurize_inferdb (bool, optional): If true, featurizer should implement method 'featurize_for_inferdb' which transforms the input data and returns a set
+                                                of defined features for InferDB . Defaults to False.
+            pipeline (Scikitlearn Pipeline, optional): Pipeline to train input data. Transforms input data into predictions. Defaults to None.
+            inferdb_columns (list, optional): List containing a subset of columns for InferDB. Defaults to None.
+            feature_names (list, optional): Ordered list containing the names for each column in the input data. Defaults to None.
+            section (string, optional): Schema prefix for postgres. Defaults to 'pgml'.
+            featurize_query (Composition, optional): SQL query to featurize the input data. Defaults to None.
+        """
 
         super().__init__(X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb, pipeline, inferdb_columns, feature_names, section, featurize_query)
 
         self.create_aux_functions()
 
     def create_preprocessing_pipeline(self, source_table = 'encoded'):
+        """Creates a preprocessing function in postgres
+
+        Args:
+            source_table (str, optional): name of the relation to process the data from. Defaults to 'encoded'.
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1269,6 +1527,8 @@ class SQLmodel(Transpiler):
         conn.commit()
     
     def create_coef_table(self):
+        """Creates a relation containing linear/logistic regression coefficients
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1341,6 +1601,8 @@ class SQLmodel(Transpiler):
         conn.commit()
 
     def create_scorer_function_lr(self):
+        """Creates a function in postgres that scores all datapoints in the input data using a linear model
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1432,6 +1694,8 @@ class SQLmodel(Transpiler):
             self.create_acc_measure_function('score', 'rmsle')
 
     def create_nn_table(self):
+        """Creates a relation in postgres holding the layers and weights of a neural network
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1454,7 +1718,7 @@ class SQLmodel(Transpiler):
         for idc, c in enumerate(self.pipeline[-1].coefs_):
             for idx, weights in enumerate(c):
                 for idw, w in enumerate(weights):
-                    tup = (idc, idx, idw, np.float32(w), np.float32(self.pipeline[-1].intercepts_[idc][idw]))
+                    tup = (idc, idx, idw, w, self.pipeline[-1].intercepts_[idc][idw])
 
                     if idc == len (self.pipeline[-1].coefs_) - 1 and idx == len(c) - 1 and idw == len(weights) - 1:
                         insert_statement += str(tup)
@@ -1467,6 +1731,8 @@ class SQLmodel(Transpiler):
         # return insert_statement
 
     def create_nn_scorer_function(self):
+        """creates a function in postgres that scores all datapoints in the input data using a neural network model relation
+        """        
 
         conn, cur = self.create_postgres_connection()
         ### Creates a function to transform preprocessed arrays into predictions
@@ -1474,7 +1740,7 @@ class SQLmodel(Transpiler):
         if self.task in ('classification', 'multi-class'):
             select_statement = 'GREATEST(0, sum(m1.val * nn2.val) + bias) as prediction'
         elif self.task == 'regression':
-            select_statement = 'pgml.crazy_exp(sum(m1.val * nn2.val) + bias) as prediction'
+            select_statement = 'pgml.crazy_exp(GREATEST(0,sum(m1.val * nn2.val) + bias)) as prediction'
 
         if self.task in ('classification', 'regression'):
 
@@ -1569,11 +1835,8 @@ class SQLmodel(Transpiler):
             self.create_acc_measure_function('score', 'rmsle')
     
     def create_sql_representation(self):
-        
-        
-        # self.create_imputation_set(limit_factor, featurize_query, return_type_statement)
-        # self.create_encode_scale_set()
-        # self.create_preprocessing_pipeline()
+        """Creates SQL artifacts for a given model
+        """        
 
         if self.model.__class__.__name__ in ('MLPRegressor', 'MLPClassifier'):
             self.create_nn_table()
@@ -1585,6 +1848,8 @@ class SQLmodel(Transpiler):
         print('Model representation was created')
     
     def create_report_function_pg(self):
+        """Creates a function in postgres to summarize the model's performance
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1680,7 +1945,12 @@ class SQLmodel(Transpiler):
         cur.execute(function_statement)
         conn.commit()
 
-    def create_report_pg(self):
+    def create_report_pg(self, iterations=5):
+        """Creates SQL artifacts for a model and executes performance function
+
+        Returns:
+            DataFrame: Pandas DataFrame containing a summary of the performance numbers for the model
+        """        
 
         DEC2FLOAT = new_type(
         DECIMAL.values,
@@ -1701,7 +1971,7 @@ class SQLmodel(Transpiler):
                                                                                            )
 
         df = pd.DataFrame()
-        for i in range(5):
+        for i in range(iterations):
             cur.execute(query)
 
             result = cur.fetchall()
@@ -1712,8 +1982,10 @@ class SQLmodel(Transpiler):
             
             if self.task == 'regression':
                 columns = ['Solution', 'Size (B)', 'RMSLE', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
             else:
                 columns = ['Solution', 'Size (B)', 'Accuracy', 'Precision', 'Recall', 'F1', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
 
             summary_df = pd.DataFrame(results, columns=columns)
             summary_df['End-to-End Latency (ms)'] = summary_df.apply(lambda x: x['Impute Featurize Latency (ms)'] + x['Encode Scale Latency (ms)'] + x['Score Latency (ms)'], axis=1)
@@ -1726,12 +1998,44 @@ class SQLmodel(Transpiler):
         return df
 
 class PGML(Transpiler):
+    """Child class for the PGML transpiler 
+
+    Args:
+        Transpiler (Transpiler): _description_
+    """
 
     def __init__(self, X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb=False, pipeline=None, inferdb_columns=None, feature_names=None, section='pgml', featurizer_query=None):
+        """Constructor method for PGML transpiler
+
+        Args:
+            X_train (np.array or pd.DataFrame): array or dataframe containing the train data
+            X_test (np.array or pd.DataFrame): array or dataframe containing the test data
+            y_train (np.array): array containing the train true values
+            y_test (np.array): array containing the test true values
+            experiment_name (string): name of the experiment
+            task (string): 
+                - 'classification' for binary classification
+                - 'regression' for regression
+                - 'multi-class' for multi-label classification
+            has_featurizer (bool): boolean indicator for featurizer at the 0 position (pipeline[0]) of the pipeline steps.
+            featurize_inferdb (bool, optional): If true, featurizer should implement method 'featurize_for_inferdb' which transforms the input data and returns a set
+                                                of defined features for InferDB . Defaults to False.
+            pipeline (Scikitlearn Pipeline, optional): Pipeline to train input data. Transforms input data into predictions. Defaults to None.
+            inferdb_columns (list, optional): List containing a subset of columns for InferDB. Defaults to None.
+            feature_names (list, optional): Ordered list containing the names for each column in the input data. Defaults to None.
+            section (string, optional): Schema prefix for postgres. Defaults to 'pgml'.
+            featurize_query (Composition, optional): SQL query to featurize the input data. Defaults to None.
+        """
 
         super().__init__(X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb, pipeline, inferdb_columns, feature_names, section, featurizer_query)
     
     def train_model_in_pgml(self, model, model_parameters=None):
+        """Trains a model in postgres using PGML
+
+        Args:
+            model (str): model name
+            model_parameters (str, optional): String containing model's parameters in PGML format. Defaults to None.
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1782,6 +2086,8 @@ class PGML(Transpiler):
         conn.commit()
     
     def deploy_pgml_trained_model(self):
+        """Deploys a trained model in postgres using PGML
+        """        
         conn, cur = self.create_postgres_connection()
 
         function_statement = sql.SQL( """SELECT * FROM {section}.deploy(
@@ -1795,6 +2101,11 @@ class PGML(Transpiler):
         conn.commit()
     
     def create_scorer_function_pgml(self, source_table):
+        """Creates a function in postgres that scores all points in the input data using a PGML deployed model 
+
+        Args:
+            source_table (str): name of the relation to score the records from
+        """        
 
         if self.task == 'regression':
             prediction_statement = 'pgml.crazy_exp(prediction)'
@@ -1847,13 +2158,23 @@ class PGML(Transpiler):
             self.create_acc_measure_function('score_pgml', 'rmsle')
     
     def create_solution(self, model, model_parameters, source_table):
+        """Creates PGML artifacts
+
+        Args:
+            model (str): model name
+            model_parameters (str): string containing model parameters in PGML format
+            source_table (str): name of the relation to create the scores from
+        """        
 
         self.train_model_in_pgml(model, model_parameters)
+        self.drop_train_table()
         self.deploy_pgml_trained_model()
         self.create_scorer_function_pgml(source_table)
         print('PGML model artifacts were created')
     
     def create_report_function_pg(self):
+        """creates a function in postgres that summarizes the performance of a PGML solution
+        """        
 
         conn, cur = self.create_postgres_connection()
 
@@ -1954,7 +2275,18 @@ class PGML(Transpiler):
         cur.execute(function_statement)
         conn.commit()
 
-    def create_report_pg(self, model, model_parameters, source_table='encoded', featurize_query=None):
+    def create_report_pg(self, model, model_parameters, source_table='encoded', featurize_query=None, iterations=5):
+        """creates a summary of the performance numbers of a deployed PGML solution
+
+        Args:
+            model (str): model name
+            model_parameters (str): string containing model parameters in the PGML format
+            source_table (str, optional): name of the relation to score the records from. Defaults to 'encoded'.
+            featurize_query (str, optional): SQL query to featuroze the input data. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """        
         
 
         DEC2FLOAT = new_type(
@@ -1974,7 +2306,7 @@ class PGML(Transpiler):
         query = sql.SQL(""" select * from {section}.{input_name}_pgml_report() """).format(input_name = sql.SQL(input_name), section=sql.SQL(self.section))
         
         df = pd.DataFrame()
-        for i in range(5):
+        for i in range(iterations):
 
             cur.execute(query)
 
@@ -1986,8 +2318,12 @@ class PGML(Transpiler):
             
             if self.task == 'regression':
                 columns = ['Solution', 'Size (B)', 'RMSLE', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
             else:
                 columns = ['Solution', 'Size (B)', 'Accuracy', 'Precision', 'Recall', 'F1', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
+
+                # columns = ['Solution', 'Size (B)', 'Impute Featurize Latency (ms)', 'Encode Scale Latency (ms)', 'Score Latency (ms)', 'Batch Size (Records)']
 
             summary_df = pd.DataFrame(results, columns=columns)
             summary_df['End-to-End Latency (ms)'] = summary_df.apply(lambda x: x['Impute Featurize Latency (ms)'] + x['Encode Scale Latency (ms)'] + x['Score Latency (ms)'], axis=1)
@@ -2654,14 +2990,48 @@ class MADLIB(Transpiler):
         return df
 
 class Standalone(Transpiler):
+    """Child class for InferDB's standalone implementation
+
+    Args:
+        Transpiler (Transpiler): _description_
+    """
 
     def __init__(self, X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb=False, pipeline=None, inferdb_columns=None, feature_names=None):
+        """Constructor method for InferDB's standalone implementation
+
+        Args:
+            X_train (np.array or pd.DataFrame): array or dataframe containing the train data
+            X_test (np.array or pd.DataFrame): array or dataframe containing the test data
+            y_train (np.array): array containing the train true values
+            y_test (np.array): array containing the test true values
+            experiment_name (string): name of the experiment
+            task (string): 
+                - 'classification' for binary classification
+                - 'regression' for regression
+                - 'multi-class' for multi-label classification
+            has_featurizer (bool): boolean indicator for featurizer at the 0 position (pipeline[0]) of the pipeline steps.
+            featurize_inferdb (bool, optional): If true, featurizer should implement method 'featurize_for_inferdb' which transforms the input data and returns a set
+                                                of defined features for InferDB . Defaults to False.
+            pipeline (Scikitlearn Pipeline, optional): Pipeline to train input data. Transforms input data into predictions. Defaults to None.
+            inferdb_columns (list, optional): List containing a subset of columns for InferDB. Defaults to None.
+            feature_names (list, optional): Ordered list containing the names for each column in the input data. Defaults to None.
+        """        
 
         super().__init__(X_train, X_test, y_train, y_test, experiment_name, task, has_featurizer, featurize_inferdb, pipeline, inferdb_columns, feature_names)
 
     def get_kv_tuples(self, cat_mask, with_pred=True, balance_ratio=1):
+        """Creates kv tuples. Keys--> embedding, Values--> predictions
 
-        encoder = Encoder('optimal', self.task)
+        Args:
+            cat_mask (list): list containing the indices of the categorical features in the input data
+            with_pred (bool, optional): If True, aggregate model's predictions. If False aggregate y_train true values. Defaults to True.
+            balance_ratio (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            nd-array: nd-array containing kv tuples. value is the last element of each array and keys correspond to the n-1 elements of the array, where n is the size of the second dimension of the array.
+        """        
+
+        encoder = Encoder(self.task)
 
         if with_pred:
             encoder.fit(self.x_featurized_inferdb, self.y_train_pred, cat_mask)
@@ -2718,6 +3088,16 @@ class Standalone(Transpiler):
         return tuples
     
     def create_standalone_index(self, cat_mask, with_pred=True, balance_ratio=1):
+        """Populates a Trie instance
+
+        Args:
+            cat_mask (list): list containing the indices of the categorical features in the input data
+            with_pred (bool, optional): If true aggregates model's predictions. If False aggregates y_train true values. Defaults to True.
+            balance_ratio (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            Trie, float: Trie instance and time to build the instance
+        """        
 
         # Populate index
         index_time = 0
@@ -2735,6 +3115,17 @@ class Standalone(Transpiler):
         return model_index, index_time
     
     def perform_index_inference(self, cat_mask, with_pred=True, balance_ratio=1):
+        """Performs inference with an Standalone InferDB implementation
+
+        Args:
+            cat_mask (list): list containing the indices of the categorical features in the input data
+            with_pred (bool, optional): If True aggregates model's predictions. If False aggregates y_train tru values. Defaults to True.
+            balance_ratio (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            float, float, int, float, float: index_avg_prep_runtimes, index_avg_scoring_runtimes, index_size, index_error, time_to_populate_index
+            float, float, int, float, float, float, float, float: index_avg_prep_runtimes, index_avg_scoring_runtimes, index_size, index_accuracy, index_f1, index_recall, index_precision, time_to_populate_index
+        """        
 
         model_index, time_to_populate_index = self.create_standalone_index(cat_mask, with_pred, balance_ratio)
 
@@ -2824,6 +3215,12 @@ class Standalone(Transpiler):
             return index_avg_prep_runtimes, index_avg_scoring_runtimes, index_size, index_error, time_to_populate_index
     
     def perform_model_inference(self):
+        """Performs inference with a trained pipeline
+
+        Returns:
+            float, float, int, float: model_avg_prep_runtimes, model_avg_scoring_runtimes, model_size, model_error
+            float, float, int, float, float, float, float: model_avg_prep_runtimes, model_avg_scoring_runtimes, model_size, model_accuracy, model_f1, model_recall, model_precision
+        """        
     
         if isinstance(self.X_test, pd.DataFrame):
 
@@ -2833,18 +3230,17 @@ class Standalone(Transpiler):
             inference_runtimes = np.zeros(sample.shape[0], dtype=float)
             preprocessing_runtimes = np.zeros(sample.shape[0], dtype=float)
             
-            if self.has_featurizer:
-                for index, row in sample.iterrows():
-                    row = row.to_frame().transpose()
-                    start = time.time()
-                    transformed_instance = self.pipeline[:-1].transform(row)
-                    end = time.time() - start
-                    preprocessing_runtimes[index] = end
-                    self.experiment_transformed_input_size = transformed_instance.shape[1]
-                    start = time.time()
-                    self.pipeline[-1].predict(transformed_instance)
-                    end = time.time() - start
-                    inference_runtimes[index] = end
+            for index, row in sample.iterrows():
+                row = row.to_frame().transpose()
+                start = time.time()
+                transformed_instance = self.pipeline[:-1].transform(row)
+                end = time.time() - start
+                preprocessing_runtimes[index] = end
+                self.experiment_transformed_input_size = transformed_instance.shape[1]
+                start = time.time()
+                self.pipeline[-1].predict(transformed_instance)
+                end = time.time() - start
+                inference_runtimes[index] = end
         elif isinstance(self.X_test, np.ndarray):
             
             rng = np.random.default_rng()
@@ -2897,6 +3293,16 @@ class Standalone(Transpiler):
             return model_avg_prep_runtimes, model_avg_scoring_runtimes, model_size, model_accuracy, model_f1, model_recall, model_precision
     
     def create_report(self, cat_mask, with_pred=True, balance_ratio=1):
+        """Creates a summary dataframe containing performance numbers for an InferDB instance
+
+        Args:
+            cat_mask (list): list containing indices for categorical features in the input data
+            with_pred (bool, optional): If True aggregates predictions from a model. If False, aggregates true values from y_train. Defaults to True.
+            balance_ratio (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            DataFrame: DataFrame containing a summary of performance numbers for InferDB standalone implementation
+        """        
 
         if self.task == 'regression':
             model_avg_prep_runtimes, model_avg_scoring_runtimes, model_size, model_error = self.perform_model_inference()

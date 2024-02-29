@@ -114,7 +114,7 @@ def train_pipeline(path_to_data, target_feature, pipeline):
 def get_kv_tuples_ccf(trained_pipeline, training_features, path_to_data, target_feature):
 
     df = pd.read_csv(path_to_data)
-    encoder = Encoder('optimal', 'classification')
+    encoder = Encoder('classification')
     
     X = df[training_features]
     y = df[target_feature].to_numpy()
@@ -188,7 +188,7 @@ def get_kv_tuples_ccf(trained_pipeline, training_features, path_to_data, target_
 def get_kv_tuples_nyc(trained_pipeline, training_features, path_to_data, target_feature, complex=False, optimize=True):
 
         df = pd.read_csv(path_to_data)
-        encoder = Encoder('optimal', 'regression')
+        encoder = Encoder('regression')
         
         X = df[training_features]
         y = df[target_feature].to_numpy()
@@ -291,7 +291,7 @@ def get_size(obj, seen=None):
 def build_deterministic_trie(trained_pipeline, training_features, path_to_data, target_feature, greedy_solution, bs_solution):
 
     df = pd.read_csv(path_to_data)
-    encoder = Encoder('optimal', 'classification')
+    encoder = Encoder('classification')
     
     X = df[training_features]
     y = df[target_feature].to_numpy()

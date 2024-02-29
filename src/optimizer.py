@@ -1,18 +1,24 @@
 import numpy as np
 from math import log
 import pandas as pd
-import multiprocessing as mp
-import yaml
-import os
 from tqdm import tqdm
 from copy import deepcopy
 from itertools import permutations
 
-
-
 class Problem:
+    """This class defines a feature selection problem.
+    """    
 
     def __init__(self, encoded_x, y, encoder_num_bins, task, sample_factor) -> None:
+        """Constructor method for the problem class
+
+        Args:
+            encoded_x (ndarray): ndarray containing the encoded training data
+            y (array): array containing predictions or true values
+            encoder_num_bins (dict): dictionary containing the encoders of the features
+            task (str): 'classification' for binary classification, 'regression', 'multi-class' for muti-label classification
+            sample_factor (float): proportion of the data to use for feature selection
+        """        
         self.encoded_x = encoded_x
         self.y = y
         self.iv_array = np.empty
@@ -47,13 +53,26 @@ class Problem:
         self.adjustement_factor = 0.5
     
     def set_number_of_bins(self):
+        """Gets the number of bins in order for each feature
+        """        
 
         self.bin_array = np.fromiter(self.encoders.values(), dtype=int)
     
     def weird_division(self, n, d):
+        """avoids division by 0
+
+        Args:
+            n (int, float): dividend
+            d (int, float): divisor
+
+        Returns:
+            int, float: division result
+        """        
         return n / d if d else 0
     
     def set_information_value(self):
+        """computes information value for all features in the encoded set
+        """        
 
         iv_list = []
         for idx in range(self.encoded_x.shape[1]):
@@ -85,6 +104,8 @@ class Problem:
         self.iv_array = np.array(iv_list)
     
     def set_costs(self):
+        """Sets the cost array
+        """        
 
         self.set_number_of_bins()
         # self.set_information_value()
@@ -93,17 +114,41 @@ class Problem:
         self.costs_array = self.iv_array ### --> beneficial for IV
     
 class Optimizer:
-
+    """This class contains the methods to find a solution for a feature selection problem using heuristics
+    """    
     
     def __init__(self, problem, sample_factor) -> None:
+        """Constructor method for the optimizer
+
+        Args:
+            problem (Problem): Feature selection problem
+            sample_factor (float): Proportion of the encoded data to use
+        """        
         self.problem = problem
         self.sample_factor = sample_factor
         self.class_agg = self.problem.df.groupby(self.problem.target_variable_number).size()
     
     def weird_division(self, n, d):
+        """avoids division by 0
+
+        Args:
+            n (int, float): dividend
+            d (int, float): divisor
+
+        Returns:
+            int, float: division result
+        """  
         return n / d if d else 0
     
     def compute_iv(self, index):
+        """Computes information value for a candidate index
+
+        Args:
+            index (list): list containing the candidate features indices
+
+        Returns:
+            float: information value
+        """        
 
         if self.problem.task == 'classification':
             agg_df = self.problem.df.groupby(index)[self.problem.target_variable_number].agg(['count', 'sum'])
@@ -128,6 +173,8 @@ class Optimizer:
         return iv
 
     def greedy_search(self): 
+        """Performs greedy search for feature selection problem
+        """        
 
         sort_time = 0
         score_paths_time = 0
@@ -201,6 +248,15 @@ class Optimizer:
 
 
     def sensitivity(self, sample_factor=1, index_size=None):
+        """computes the filling degree of a candidate index until certain max path length (index size)
+
+        Args:
+            sample_factor (int, optional): If 1 uses all input data. If float uses a defined proportion of the data. Defaults to 1.
+            index_size (int, optional): max length path of the index. Defaults to None.
+
+        Returns:
+            tuple(int, float, int, int, float): (index_size, sample_factor, compund_keys.shape[0], all_possible_paths, filling_degree)
+        """        
 
         df = self.df.copy()
         

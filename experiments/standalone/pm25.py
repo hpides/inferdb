@@ -20,173 +20,142 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.impute import SimpleImputer
 
+def get_pm_experiment_data():
 
-data_path = os.path.join(project_folder, 'data', 'pm', 'pm_2016_2019_augmented.csv')
+    data_path = os.path.join(project_folder, 'data', 'paper_data', 'pm', 'pm_2016_2019_augmented.csv')
+    df = pd.read_csv(data_path, nrows=30000000)
+    df.set_index("date", inplace=True)
 
-# data_path = os.path.join(project_folder, 'data', 'pm', 'pm_2016_2019.csv')
-df = pd.read_csv(data_path, nrows=50000000)
+    training_features = [
+                        'latitude', 'longitude', 'weekday', 'weekofyear', 'day', 
+                        'previous_value', 
+                        'rolling_2',
+                        'trend'
+                        ]
 
-# df['date'] = pd.to_datetime(df['date'], format='mixed', dayfirst=True)
+    inferdb_subset = [
+                        'latitude', 'longitude', 'weekday', 'weekofyear', 'day', 
+                        'previous_value', 
+                        'rolling_2',
+                        'trend'
+                    ]
+    inferdb_indices = [training_features.index(i) for i in inferdb_subset]
 
-# df['weekday'] = df['date'].dt.weekday
-# df['weekofyear'] = df['date'].dt.isocalendar().week
-# df['day'] = df['date'].dt.day
-# df = df.sort_values(by=["ctfips", "date"])
-# df["previous_value"] = df.groupby("ctfips")["DS_PM_pred"].shift()
-# df["previous_value_2"] = df.groupby("ctfips")["DS_PM_pred"].shift(2)
-# df["previous_value_3"] = df.groupby("ctfips")["DS_PM_pred"].shift(3)
-# df["previous_value_4"] = df.groupby("ctfips")["DS_PM_pred"].shift(4)
-# df["previous_value_5"] = df.groupby("ctfips")["DS_PM_pred"].shift(5)
-# df["previous_value_6"] = df.groupby("ctfips")["DS_PM_pred"].shift(6)
-# df['previous_value_7'] = df.groupby("ctfips")["DS_PM_pred"].shift(7)
-# df['previous_value_30'] = df.groupby("ctfips")["DS_PM_pred"].shift(31)
-# df['trend_sign'] = df.apply(lambda x: 1 if x['previous_value']/x['previous_value_30'] > 1.05 else -1 if x['previous_value']/x['previous_value_30'] < .95 else 0, axis=1)
-# df['trend'] = df.apply(lambda x: x['previous_value']/x['previous_value_30'], axis=1)
+    cat_features = []
+    num_features = [i for i in training_features if i not in cat_features]
 
+    cat_mask = [training_features.index(i) for i in cat_features]
+    num_mask = [idx for idx, i in enumerate(training_features) if idx not in cat_mask]
 
-# df.set_index(["ctfips", "date"], inplace=True)
-# df['rolling_2'] = df.rolling(3, closed='right')["DS_PM_pred"].mean()
-# df['rolling_3'] = df.rolling(4, closed='right')["DS_PM_pred"].mean()
-# df['rolling_7'] = df.rolling(8, closed='right')["DS_PM_pred"].mean()
-# df['rolling_15'] = df.rolling(16, closed='right')["DS_PM_pred"].mean()
-# df['rolling_30'] = df.rolling(31, closed='right')["DS_PM_pred"].mean()
-# df.reset_index(inplace=True)
-# data_path = os.path.join(project_folder, 'data', 'pm', 'pm_2016_2019_augmented.csv')
-# df.to_csv(data_path, index=False)
-df.set_index("date", inplace=True)
+    y = df['DS_PM_pred'].to_numpy()
 
-training_features = [
-                    'latitude', 'longitude', 'weekday', 'weekofyear', 'day', 
-                     'previous_value', 
-                     'rolling_2',
-                     'trend'
-                     ]
+    training_threshold = '2017-01-01'
+    test_threshold = '2018-01-01'
+    X_train = df.loc[df.index < training_threshold, training_features].bfill()
+    X_test = df.loc[(df.index > training_threshold) & (df.index <= test_threshold), training_features].bfill()
+    X_train = X_train.fillna(0)
+    X_test = X_test.fillna(0)
+    y_train = df.loc[df.index < training_threshold, 'DS_PM_pred'].to_numpy()
+    y_test = df.loc[(df.index > training_threshold) & (df.index <= test_threshold), 'DS_PM_pred'].to_numpy()
 
-inferdb_subset = [
-                    'latitude', 'longitude', 'weekday', 'weekofyear', 'day', 
-                    'previous_value', 
-                    'rolling_2',
-                    'trend'
-                ]
-inferdb_indices = [training_features.index(i) for i in inferdb_subset]
+    X_train, X_test = X_train.to_numpy(), X_test.to_numpy()
 
-cat_features = []
-num_features = [i for i in training_features if i not in cat_features]
+    return X_train, X_test, y_train, y_test, inferdb_indices, training_features, num_mask
 
-cat_mask = [training_features.index(i) for i in cat_features]
-num_mask = [idx for idx, i in enumerate(training_features) if idx not in cat_mask]
+def get_pipeline(model, num_mask):
 
-y = df['DS_PM_pred'].to_numpy()
-
-training_threshold = '2017-01-01'
-test_threshold = '2017-03-31'
-X_train = df.loc[df.index < training_threshold, training_features].bfill()
-X_test = df.loc[(df.index > training_threshold) & (df.index <= test_threshold), training_features].bfill()
-X_train = X_train.fillna(0)
-X_test = X_test.fillna(0)
-y_train = df.loc[df.index < training_threshold, 'DS_PM_pred'].to_numpy()
-y_test = df.loc[(df.index > training_threshold) & (df.index <= test_threshold), 'DS_PM_pred'].to_numpy()
-
-X_train, X_test = X_train.to_numpy(), X_test.to_numpy()
-
-sample_indices = np.random.randint(X_train.shape[0], size=round(X_train.shape[0] * 0.3))
-
-X_train = X_train[sample_indices]
-y_train = y_train[sample_indices]
-
-numerical_imputer = Pipeline(
-                    steps=
-                            [
-                                ('imputer', SimpleImputer())
-                            ]
-                    )
-
-numerical_transformer = Pipeline(
-                    steps=
-                            [
-                                ('scaler', RobustScaler())
-                            ]
-                    )
-
-categorical_transformer = Pipeline(
-                    steps=
-                            [
-                                ('encoder', OneHotEncoder(handle_unknown='ignore', drop='first'))
-                            ]
-                    )
-
-categorical_transformer_trees = Pipeline(
-    steps=
-            [
-                ('encoder', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1))
-            ]
-    )
-
-column_transformer = ColumnTransformer(
-                                            transformers=[
-                                                            ('num', numerical_transformer, []),
-                                                            ('cat', categorical_transformer, [])
-                                                        ]
-                                            , remainder='drop'
-                                            , n_jobs=-1
-
-                                        )
-
-pipeline = Pipeline(
+    numerical_transformer = Pipeline(
                         steps=
-                                [   
-                                    ('column_transformer', column_transformer),
-                                    ('imputer', SimpleImputer())
+                                [
+                                    ('scaler', RobustScaler())
                                 ]
-                    )
+                        )
 
-xgboost = xgb.XGBRegressor(n_estimators=350, objective="reg:squarederror", random_state=42, n_jobs=-1, min_child_weight=10, subsample=0.8, eta=0.05)
-lr = LinearRegression(n_jobs=-1)
-dt = DecisionTreeRegressor()
-nn = MLPRegressor(hidden_layer_sizes=(len(training_features),), max_iter=10000, activation='logistic')
-knn = KNeighborsRegressor(algorithm='kd_tree', n_jobs=-1)
-lgbm = LGBMRegressor(n_estimators=350, n_jobs=-1, objective='regression', reg_lambda=1, reg_alpha=1)
+    column_transformer = ColumnTransformer(
+                                                transformers=[
+                                                                ('num', numerical_transformer, [])
+                                                            ]
+                                                , remainder='passthrough'
+                                                , n_jobs=-1
 
-models = [
-            xgboost, 
-            lr, 
-            dt, 
-            nn, 
-            knn, 
-            lgbm
-        ]
-tree_based_models = [xgboost.__class__.__name__, dt.__class__.__name__, lgbm.__class__.__name__]
+                                            )
 
-df = pd.DataFrame()
-for model in models:
+    pipeline = Pipeline(
+                            steps=
+                                    [   
+                                        ('imputer', SimpleImputer()),
+                                        ('column_transformer', column_transformer),
+                                        
+                                    ]
+                        )
+
+    tree_based_models = ['xgbregressor', 'decisiontreeregressor', 'lgbmregressor']
 
     if model.__class__.__name__ in tree_based_models:
 
-        params = {'remainder':'passthrough'}
-        column_transformer.set_params(**params)
         pipeline.named_steps.column_transformer.transformers = [
-                                                                    ('cat', categorical_transformer_trees, [])
+                                                                    ('num', numerical_transformer, [])
                                                                 ]
+        
     else:
-        params = {'remainder':'drop'}
-        column_transformer.set_params(**params)
         pipeline.named_steps.column_transformer.transformers = [
                                                                     ('num', numerical_transformer, num_mask)
                                                                 ]
 
     pipeline.steps.append(['clf', model])
 
+    return pipeline
+
+def get_report(pipeline, iterations):
+
+    X_train, X_test, y_train, y_test, inferdb_indices, training_features, num_mask = get_pm_experiment_data()
+
+    df = pd.DataFrame()
     exp = Standalone(X_train, X_test, y_train, y_test, 'pm25', 'regression', False, False, pipeline, inferdb_indices)
-    for i in range(5):
+    for i in range(iterations):
         d = exp.create_report(cat_mask=[])
         d['iteration'] = i
         df = pd.concat([df, d])
-        export_path = os.path.join(project_folder, 'experiments', 'output', exp.experiment_name)
-        df.to_csv(export_path + '_standalone.csv', index=False)
     
-    pipeline.steps.pop(-1)
+    return df
 
 
+def pm_experiment(iterations=5, paper_models=False):
 
+    xgboost = xgb.XGBRegressor(objective="reg:squarederror", max_delta_step=10, gamma=1, random_state=42, n_jobs=-1, min_child_weight=10, subsample=0.8, eta=0.05)
+    lr = LinearRegression(n_jobs=-1)
+    dt = DecisionTreeRegressor()
+    nn = MLPRegressor(hidden_layer_sizes=(8,), max_iter=10000, activation='relu')
+    knn = KNeighborsRegressor(algorithm='kd_tree', n_jobs=-1)
+    lgbm = LGBMRegressor(n_jobs=-1, objective='regression', random_state=42, reg_lambda=1, reg_alpha=1)
 
+    num_mask = [0, 1, 2, 3, 4, 5, 6, 7]
 
+    if paper_models:
+        models = [
+                    xgboost,  
+                    knn,  
+                    lgbm
+                ]
+    else:
+        models = [
+            xgboost, 
+            lr, 
+            dt, 
+            nn, 
+            knn, 
+            lgbm
+            ]
+
+    df = pd.DataFrame()
+    for model in models:
+
+        pipeline = get_pipeline(model, num_mask)
+        d = get_report(pipeline, iterations)
+        df = pd.concat([df, d])
+        export_path = os.path.join(project_folder, 'experiments', 'output', 'pm25')
+        df.to_csv(export_path + '_standalone.csv', index=False)
+
+if __name__ == "__main__":
+
+    pm_experiment(iterations=int(sys.argv[1]), paper_models=bool(sys.argv[2]))

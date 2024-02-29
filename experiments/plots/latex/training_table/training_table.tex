@@ -1,0 +1,29 @@
+\documentclass[plain]{article}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{pdflscape}
+\usepackage{geometry}
+ \geometry{
+ a3paper,
+ total={170mm,370mm},
+ left=0mm,
+ top=20mm,
+ right=0mm
+ }
+
+\pagestyle{empty}
+
+\begin{document}
+
+\begin{landscape}
+% \setlength{\hoffset}{0pt}
+\begin{table*}
+% \footnotesize
+\centering
+
+\input{{tr_table.tex}}
+\end{table*}
+
+\end{landscape}
+
+\end{document}

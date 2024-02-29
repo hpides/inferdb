@@ -876,7 +876,7 @@ class preprocessing_experiment:
     def get_kv_tuples(self, trained_pipeline, purpose, path_to_data, target_feature, persist):
 
         df = pd.read_csv(path_to_data)
-        encoder = Encoder('optimal', 'regression')
+        encoder = Encoder('regression')
         
         X = df[self.training_features]
         y = df[target_feature].to_numpy()

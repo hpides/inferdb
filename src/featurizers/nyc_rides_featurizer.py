@@ -33,7 +33,7 @@ class NYC_Featurizer(BaseEstimator, TransformerMixin):
                                 'ntrafficsignals', 'ncrossing', 'nstop', 'nintersection',
                     
                                 # 'pickup_cluster', 'dropoff_cluster',
-                                # 'arc', 'pickup_bearing', 'dropoff_bearing',
+                                'arc', 'pickup_bearing', 'dropoff_bearing',
                                 'pickup_pca0', 'pickup_pca1', 'dropoff_pca0', 'dropoff_pca1', 'pca_manhattan'
 
                                 
@@ -226,23 +226,23 @@ class NYC_Featurizer(BaseEstimator, TransformerMixin):
         
         if self.depth == 'deep':
 
-            # for feature in [i for i in self.num_features if i in ('passenger_count', 'distance', 'geo_distance')]:
+            for feature in [i for i in self.num_features if i in ('passenger_count', 'distance', 'geo_distance')]:
 
-            #     lower, upper = self.learn_iqr(X_[feature].to_numpy())
-            #     self.outlier_boundaries[feature] = (lower, upper)
-            #     outlier_indices = np.nonzero((X_[feature].to_numpy() < lower) | (X_[feature].to_numpy() > upper))
+                lower, upper = self.learn_iqr(X_[feature].to_numpy())
+                self.outlier_boundaries[feature] = (lower, upper)
+                outlier_indices = np.nonzero((X_[feature].to_numpy() < lower) | (X_[feature].to_numpy() > upper))
 
-            #     X_train = X_.iloc[outlier_indices[0], [idx for idx, i in enumerate(list(X_)) if i != feature and (i in self.num_features or i in self.cat_features)]]
-            #     y_train = X_.iloc[outlier_indices[0], list(X_).index(feature)].to_numpy()
+                X_train = X_.iloc[outlier_indices[0], [idx for idx, i in enumerate(list(X_)) if i != feature and (i in self.num_features or i in self.cat_features)]]
+                y_train = X_.iloc[outlier_indices[0], list(X_).index(feature)].to_numpy()
 
                 
-            #     training_features = [i for i in list(X_) if i != feature and i in self.num_features]
-            #     self.outlier_training_features[feature] = training_features
-            #     reg = LinearRegression(n_jobs=-1)
+                training_features = [i for i in list(X_) if i != feature and i in self.num_features]
+                self.outlier_training_features[feature] = training_features
+                reg = LinearRegression(n_jobs=-1)
                 
-            #     reg.fit(X_train[training_features], y_train)
+                reg.fit(X_train[training_features], y_train)
 
-            #     self.outlier_imputers[feature] = (reg.intercept_, reg.coef_)
+                self.outlier_imputers[feature] = (reg.intercept_, reg.coef_)
 
             ########## DATETIME FEATURES:
 
@@ -330,9 +330,9 @@ class NYC_Featurizer(BaseEstimator, TransformerMixin):
         
 
         if self.depth == 'deep':
-            # X_['arc'] = X_.apply(lambda x: self.cal_arc(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
-            # X_['pickup_bearing'] = X_.apply(lambda x: self.cal_pickup_bearing_degrees(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
-            # X_['dropoff_bearing'] = X_.apply(lambda x: self.cal_dropoff_bearing_degrees(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
+            X_['arc'] = X_.apply(lambda x: self.cal_arc(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
+            X_['pickup_bearing'] = X_.apply(lambda x: self.cal_pickup_bearing_degrees(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
+            X_['dropoff_bearing'] = X_.apply(lambda x: self.cal_dropoff_bearing_degrees(x['pickup_latitude'],x['pickup_longitude'],x['dropoff_latitude'],x['dropoff_longitude'] ), axis=1)
 
             def get_route_freq(X_):
 
@@ -422,9 +422,9 @@ class NYC_Featurizer(BaseEstimator, TransformerMixin):
             
             ########### Outlier Imputation
 
-            # X_['passenger_count'] = X_.apply(lambda x: predict_outlier_passenger(x) if x['passenger_count'] > self.outlier_boundaries['passenger_count'][1] or x['passenger_count'] < self.outlier_boundaries['passenger_count'][0] else x['passenger_count'], axis=1)
-            # X_['distance'] = X_.apply(lambda x: predict_outlier_distance(x) if x['distance'] > self.outlier_boundaries['distance'][1] or x['distance'] < self.outlier_boundaries['distance'][0] else x['distance'], axis=1)
-            # X_['geo_distance'] = X_.apply(lambda x: predict_outlier_geo_distance(x) if x['geo_distance'] > self.outlier_boundaries['geo_distance'][1] or x['geo_distance'] < self.outlier_boundaries['geo_distance'][0] else x['geo_distance'], axis=1)
+            X_['passenger_count'] = X_.apply(lambda x: predict_outlier_passenger(x) if x['passenger_count'] > self.outlier_boundaries['passenger_count'][1] or x['passenger_count'] < self.outlier_boundaries['passenger_count'][0] else x['passenger_count'], axis=1)
+            X_['distance'] = X_.apply(lambda x: predict_outlier_distance(x) if x['distance'] > self.outlier_boundaries['distance'][1] or x['distance'] < self.outlier_boundaries['distance'][0] else x['distance'], axis=1)
+            X_['geo_distance'] = X_.apply(lambda x: predict_outlier_geo_distance(x) if x['geo_distance'] > self.outlier_boundaries['geo_distance'][1] or x['geo_distance'] < self.outlier_boundaries['geo_distance'][0] else x['geo_distance'], axis=1)
 
             ###########
 
