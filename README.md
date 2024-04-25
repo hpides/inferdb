@@ -4,9 +4,16 @@ We evaluate InferDB on a server with an AMD-EPYC-7742 2.25GHz CPU (10 cores used
 
 # Requisites
 
+## Minimum Hardware
+
+- 80 GiB memory
+- 120 GiB storage
+
+## Software
+
 - Docker
 
-# Supported CPU architechtures:
+## Supported CPU architechtures:
 
 - arm64
 - amd64
